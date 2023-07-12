@@ -1,6 +1,8 @@
 #include "listeners.h"
 #include "client.h"
 #include "utils.h"
+#include "decorations.h"
+
 
 void newSurface(struct wl_listener *listener, void *data) {
 	// Initialize this surface
@@ -42,7 +44,6 @@ void newSurface(struct wl_listener *listener, void *data) {
 		tree = &root->scene->tree;
 	}
 
-	//view->sceneTree = wlr_scene_xdg_surface_create(&view->root->scene->tree, view->toplevel->base);
 	view->sceneTree = wlr_scene_xdg_surface_create(tree, view->toplevel->base);
 
 	view->sceneTree->node.data = view;
@@ -91,8 +92,6 @@ void surfaceMap(struct wl_listener *listener, void *data) {
 #endif
 
 	wl_list_insert(&view->workspace->views, &view->link);
-	fprintf(stderr, "view-List: %p\n", &view->workspace->views);
-	fprintf(stderr, "view-len: %d\n", wl_list_length(&view->workspace->views));
 
 	// Set the position of this wl_surface to be on the workspace's output
 	// that the cursor is currently on.
@@ -108,7 +107,36 @@ void surfaceMap(struct wl_listener *listener, void *data) {
 	double Y = ly + (oh - clientSurface(view)->current.height) / 2;
 	wlr_scene_node_set_position(&view->sceneTree->node, X, Y);
 
+	// Now set up the server-side decoration
+	// TODO: Delegate this to a proper decoration manager
+	if(view->decoration == NULL && view->type == CLIENT_XDG) {
+		struct wlr_box geom;
+		wlr_xdg_surface_get_geometry(view->toplevel->base, &geom);
+		fprintf(stderr, "XDG-Client geometry:\nwidth: %d\nheight: %d\n", geom.width, geom.height);
+		CairoBuffer *buf = newCairoBuffer(geom.width + 20, geom.height + 20);
+		fprintf(stderr, "Created cairo buffer\n");
+		fprintf(stderr, "Cairo buffer loc: %p\n", buf->data);
 
+
+		cairo_surface_t *surf = buf->surface;
+		cairo_set_source_rgba(buf->cairo, 1.0, 0.0, 0.0, 1.0);
+		cairo_rectangle(buf->cairo, 0, 0, geom.width, geom.height);
+		cairo_fill(buf->cairo);
+
+		struct wlr_scene_buffer *scene_buf = wlr_scene_buffer_create(view->sceneTree, &buf->base);
+		if(!scene_buf) {
+			fprintf(stderr, "Failed to create scene buffer\n");
+			return;
+		}
+		wlr_scene_node_raise_to_top(&scene_buf->node);
+		wlr_scene_buffer_set_dest_size(scene_buf, geom.width + 20, geom.height + 20);
+		wlr_scene_node_set_position(&scene_buf->node, -10, -10);
+		wlr_scene_node_set_enabled(&scene_buf->node, true);
+
+		wlr_buffer_drop(&buf->base);
+		cairo_destroy(buf->cairo);
+	}
+	// 	
 	// Give the surface focus
 	focusSurface(view, clientSurface(view));
 
@@ -433,12 +461,13 @@ void outputFrame(struct wl_listener *listener, void *data) {
 	 * generally at the output's refresh rate (e.g. 60Hz). */
 	struct MondlichtOutput *output = wl_container_of(listener, output, frame);
 	
-	struct wlr_scene *scene;
 	struct wlr_scene_output *scene_output;
 
-	scene = output->root->scene;
-	scene_output = wlr_scene_get_scene_output(scene, output->output);
-	wlr_scene_output_commit(scene_output);
+	scene_output = wlr_scene_get_scene_output(output->root->scene, output->output);
+	if(!scene_output)
+		return;
+
+	wlr_scene_output_commit(scene_output, NULL);
 
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
@@ -487,7 +516,9 @@ void newOutput(struct wl_listener *listener, void *data) {
 	output->activeWorkspace = &output->workspaces[0];
 	for(int i = 0; i < WORKSPACE_COUNT; i++) {
 		output->workspaces[i].monitor = output;
-		struct wlr_scene_tree *scene = output->workspaces[i].scene = wlr_scene_tree_create(&root->scene->tree);
+		struct wlr_scene_tree *scene = output->workspaces[i].scene = wlr_scene_tree_create(root->layers[TOP].scene);
+		// Reorder the sceneTree to be on top of layer BOTTOM, but below TOP
+		//wlr_scene_node_place_above(&scene->node, &root->layers[BOTTOM].scene->node);
 		wl_list_init(&output->workspaces[i].views);
 	}
 
@@ -503,18 +534,21 @@ void newOutput(struct wl_listener *listener, void *data) {
 	output->destroy.notify = outputDestroy;
 	wl_signal_add(&wlr_output->events.destroy, &output->destroy);
 
-	/* Setup the scale for this monitor */
-	// TODO: This has to be configurable.
-	if(strcmp(wlr_output->name, "DP-1") == 0) {
-		wlr_output_set_scale(wlr_output, 2.0);
-		wlr_output_layout_add(root->output_layout, wlr_output, 0, 0);
-	}else if(strcmp(wlr_output->name, "HDMI-A-1") == 0) {
-		wlr_output_set_scale(wlr_output, 1.0);
-		wlr_output_layout_add(root->output_layout, wlr_output, 1920, 0);
-	}
-
 	wlr_output_commit(wlr_output);
 	wl_list_insert(&root->outputs, &output->link);
+
+	/* Setup the scale for this monitor */
+	// TODO: This has to be configurable.
+	if(strcmp(wlr_output->name, "DP-4") == 0) {
+		wlr_output_set_scale(wlr_output, 1.0);
+		wlr_output_layout_add(root->output_layout, wlr_output, 0, 0);
+	}else if(strcmp(wlr_output->name, "HDMI-A-2") == 0) {
+		wlr_output_set_scale(wlr_output, 0.25);
+		wlr_output_layout_add(root->output_layout, wlr_output, 3840, 0);
+	}else{
+		wlr_output_layout_add_auto(root->output_layout, wlr_output);
+	}
+
 
 	/* Adds this to the output layout. The add_auto function arranges outputs
 	 * from left-to-right in the order they appear. A more sophisticated

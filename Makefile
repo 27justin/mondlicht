@@ -3,7 +3,8 @@ CFLAGS := -Wall -Wextra -Werror -g -O0 -Wno-unused-parameter
 CFLAGS := -Wno-unused-function # <- For wlroots specific protocols (e.g. wlr-layer-shell)
 CFLAGS += -DWLR_USE_UNSTABLE -fsanitize=address 
 CFLAGS += -DXWAYLAND
-CFLAGS += $(shell pkg-config --cflags wlroots)
+CFLAGS += $(shell pkg-config --cflags wlroots) \
+		  $(shell pkg-config --cflags cairo)
 CFLAGS += -Ibuild/wayland-protocols
 
 
@@ -17,9 +18,14 @@ WAYLAND_PROTOCOL_OBJECTS := $(WAYLAND_PROTOCOL_HEADERS:.h=.o)
 WAYLAND_PROTOCOL_DIR := $(shell pkg-config --variable=pkgdatadir wayland-protocols)
 
 
-LDFLAGS := $(shell pkg-config --libs wlroots) \
-		   $(shell pkg-config --libs wayland-server) \
+#LDFLAGS := $(shell pkg-config --libs wlroots)
+
+LDFLAGS := $(shell pkg-config --libs wayland-server) \
 		   $(shell pkg-config --libs xkbcommon) \
+		   $(shell pkg-config --libs cairo) \
+
+# Temporary workaround against old, stable, version of wlroots
+LDFLAGS += -l:libwlroots.so.12
 
 # TODO:
 # Make this easier to configure
@@ -27,7 +33,7 @@ LDFLAGS := $(shell pkg-config --libs wlroots) \
 LDFLAGS += $(shell pkg-config --libs xcb)
 
 
-SOURCES := mondlicht.c listeners.c utils.c layers.c client.c
+SOURCES := mondlicht.c listeners.c utils.c layers.c client.c decorations.c
 
 BUILD_DIR = build
 

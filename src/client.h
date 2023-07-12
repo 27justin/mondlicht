@@ -34,7 +34,9 @@ typedef struct ClientEventManager {
 #endif
 } ClientEventManager;
 
+
 typedef struct Workspace Workspace;
+typedef struct XdgDecoration XdgDecoration;
 typedef struct Client {
 	enum ClientType type;
 	struct Mondlicht *root;
@@ -49,6 +51,7 @@ typedef struct Client {
 
 	// Event manager
 	ClientEventManager *events;
+	XdgDecoration *decoration;
 
 	struct wlr_scene_tree *sceneTree;
 

@@ -8,6 +8,7 @@
 #include <time.h>
 #include <unistd.h>
 #include "utils.h"
+#include "decorations.h"
 
 bool hotkey(struct Mondlicht *root, xkb_keysym_t sym) {
 	/*
@@ -219,10 +220,24 @@ int main(int argc, char *argv[]) {
 		wl_list_init(&root.layers[i].surfaces);
 		root.layers[i].scene = wlr_scene_tree_create(&root.scene->tree);
 	}
+	// Reorder the layers in the scene tree.
+	fprintf(stderr, "BACKGROUND below anything else\n");
+	wlr_scene_node_lower_to_bottom(&root.layers[BACKGROUND].scene->node);
+	fprintf(stderr, "BOTTOM above BACKGROUND\n");
+	wlr_scene_node_place_above(&root.layers[BOTTOM].scene->node, &root.layers[BACKGROUND].scene->node);
+	fprintf(stderr, "TOP above BOTTOM\n");
+	wlr_scene_node_place_above(&root.layers[TOP].scene->node, &root.layers[BOTTOM].scene->node);
+	fprintf(stderr, "OVERLAY above TOP\n");
+	wlr_scene_node_place_above(&root.layers[OVERLAY].scene->node, &root.layers[TOP].scene->node);
+	
 
 	root.newLayerSurface.notify = newLayerSurface;
 	wl_signal_add(&root.layerShell->events.new_surface,
 			&root.newLayerSurface);
+
+	fprintf(stderr, "Initializing decorations\n");
+	initializeDecorations(&root);
+	fprintf(stderr, "Finished initing decorations\n");
 
 
 	/* Set up xdg-shell version 3. The xdg-shell is a Wayland protocol which is

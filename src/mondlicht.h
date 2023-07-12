@@ -22,6 +22,7 @@
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
 #include <xkbcommon/xkbcommon.h>
+#include <wlr/types/wlr_xdg_decoration_v1.h>
 
 #include "client.h"
 #include "layers.h"
@@ -75,6 +76,12 @@ typedef struct Mondlicht {
 	struct wl_listener newLayerSurface;
 
 	struct wlr_xdg_shell *xdg_shell;
+	struct wlr_xdg_decoration_manager_v1 *decorationManager;
+	struct wl_listener newDecoration;
+	struct wl_listener decorationDestroy;
+	struct wl_listener decorationConfigure;
+
+
 
 #ifdef XWAYLAND
 	struct wlr_xwayland *xwayland;
